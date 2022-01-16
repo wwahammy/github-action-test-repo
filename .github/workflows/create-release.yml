@@ -1,0 +1,87 @@
+name: Create a new release
+
+# Controls when the action will run. Workflow runs when manually triggered using the UI
+# or API.
+on:
+  workflow_dispatch:
+    # Inputs the workflow accepts.
+    inputs:
+      source_commit:
+        # Friendly description to be shown in the UI instead of 'name'
+        description: 'Commit on source repo'
+        # Default value if no value is explicitly provided
+        default: 'staging_dev'
+        # Input has to be provided for the workflow to run
+        required: true
+      source_repo:
+        description: 'The repo as username/repo_name to get the source commit from'
+        default: 'commitchange/houdini'
+        required: true
+      mode:
+        description: Mode to build
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+      new_version_tag:
+        description: New Version To Create
+        required: true
+        
+      version_on_private_staging_addon:
+        # Friendly description to be shown in the UI instead of 'name'
+        description: 'Commit on CommitChange/private-staging-addon'
+        # Default value if no value is explicitly provided
+        default: 'v2'
+        # Input has to be provided for the workflow to run
+        required: true
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "create-release"
+  create-release:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+    - name: 'Checkout our repo'
+      uses: actions/checkout@v2
+      with:
+        path: 'release-repo'
+    - name: run creation
+      env:
+        SourceRemoteName: 'source'
+        DeployRemoteName: 'origin'
+        mode: ${{ github.event.inputs.mode }}
+        VersionToCreateNewBuildFrom: ${{ github.event.inputs.source_commit }}
+        NewVersionTagForPrivateMaster: ${{ github.event.inputs.new_version_tag }}
+        SourceRepo: ${{ github.event.inputs.source_repo }}
+      run: |
+
+        cd release-repo
+
+        git remote add $SourceRemoteName https://github.com/$SourceRepo.git
+        git remote add $PrivateStagingAddonRemoteName ../private-staging-addons
+      
+        git fetch $SourceRemoteName -f $VersionToCreateNewBuildFrom
+
+        git checkout $SourceRemoteName/$VersionToCreateNewBuildFrom
+
+        git tag $NewVersionTagForPrivateMaster-$mode
+
+        current_commit=$( git rev-parse HEAD )
+
+        echo $current_commit > CCS_HASH
+
+        git add .
+
+        git config --global user.email "robot@commitchange.com"
+        git config --global user.name "Robot"
+
+        git commit -m "Release of source for $current_commit"
+
+        git tag $NewVersionTagForPrivateMaster-$mode-release
+
+        git push $DeployRemoteName $NewVersionTagForPrivateMaster-$mode
+
+        git push $DeployRemoteName $NewVersionTagForPrivateMaster-$mode-release
